@@ -4,6 +4,7 @@ from datetime import datetime
 from stravalib import Client
 from google import genai
 from google.genai import types
+from server.services.qdrant_tool import qdrant_service
 
 class StravaService:
     def __init__(self, access_token: str):
@@ -28,10 +29,16 @@ class StravaService:
 
     def run(self):
         user_activites = self._retrieve_activities()
+        if len(user_activites) < 1:
+            return
+        print("we retrieved the activities")
+        points = []
         for a in user_activites:
             meaningful_text = self._convert_activity_to_paragraph(a)
-            vector = self._embed_activity(meaningful_text)
-            # call qdrant upsert here 
+            points.append((a, meaningful_text))
+
+        print("moving onto qdrant insertion process")
+        qdrant_service.insert_points(points)
 
 
     def _convert_activity_to_paragraph(self, activity):
@@ -73,16 +80,6 @@ class StravaService:
 
         return paragraph
 
-    def _embed_activity(self, activity_text: str):
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-        embedding = client.models.embed_content(
-            model="text-embedding-004",
-            contents= activity_text,
-            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
-        )
-
-        return embedding.embeddings[0].values
 
 
     def _retrieve_activities(self):
@@ -92,7 +89,7 @@ class StravaService:
         if self.embedding_state['total_embedded'] == 0:
             try:
                 # user_activities = self.client.get_activities()
-                user_activities = self.client.get_activities(after="2025-06-20")
+                user_activities = self.client.get_activities(after="2025-06-01")
 
                 descriptive_activities = []
 
@@ -102,7 +99,7 @@ class StravaService:
                 
                 parsed_activities = self._parse_activities(descriptive_activities)
 
-                user_activities = parsed_activities
+                # user_activities = parsed_activities
             except Exception as e:
                 return f"Retrieving activities failed: {e}"
             self.embedding_state["last_sync_timestamp"] = timestamp_str
@@ -119,13 +116,14 @@ class StravaService:
                     descriptive_activities.append(descriptive_activity)
                 
                 parsed_activities = self._parse_activities(descriptive_activities)
-                user_activities = parsed_activities
+                # user_activities = parsed_activities
             except Exception as e:
                 return f"Retrieving activities after last sync failed: {e}"
             self.embedding_state["last_sync_timestamp"] = timestamp_str
             self.embedding_state["total_embedded"] += len(list(user_activities))
             self._save_embedding_state()
-        return user_activities
+        # return user_activities
+        return parsed_activities
     
     def _convert_km_splits_to_mile_paces(self, activity):
         """
@@ -234,6 +232,7 @@ class StravaService:
             total_elevation_gain = getattr(a,"total_elevation_gain", None)
             time_zone_location = getattr(a,"timezone", None)
             pr_count = getattr(a,"pr_count", None)
+            date = getattr(a, "start_date", None)
 
 
             activity_json = {
@@ -248,7 +247,8 @@ class StravaService:
                 "gear_name" : gear_name,
                 "total_elevation_gain" : total_elevation_gain,
                 "time_zone_location" : time_zone_location,
-                "pr_count": pr_count
+                "pr_count": pr_count,
+                "date" : date
             }
             parsed.append(activity_json)
 

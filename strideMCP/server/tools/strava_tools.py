@@ -1,6 +1,8 @@
 import os
 from stravalib import Client
 from server.services.token_service import token_service
+from server.services.qdrant_tool import qdrant_service
+from pydantic import Field
 
 def authenticate_with_strava() -> str:
     try:
@@ -133,6 +135,26 @@ def interpolate_time_at_distance(km_data, target_distance):
             return time2 + pace_per_meter * (target_distance - dist2)
     
     return km_data[-1][1] if km_data else 0
+
+def lookup_specific_run_by_date(
+        date: str = Field(description="Date in format YYYY-MM-DD inferred from query")
+    ) -> dict:
+
+    runs = qdrant_service.search_runs_by_date(date)
+
+    return {"runs" : runs}
+# RETRIEVAL_QUERY
+
+def lookup_by_retrieval_query(
+    retrieval_query: str = Field(description= "A general user query that will allow you to create a vector embedding and search for answer")
+) -> dict:
+    
+    vector = qdrant_service.embed_query(retrieval_query)
+
+    results = qdrant_service.search_for_runs_by_embedding(vector)
+
+    return {"runs" : results}
+
 
 
 

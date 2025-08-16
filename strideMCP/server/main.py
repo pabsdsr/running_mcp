@@ -9,7 +9,7 @@ import os
 import json
 from datetime import datetime
 
-from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities
+from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query
 from dotenv import load_dotenv
 from server.services.token_service import token_service
 from server.services.strava_service import StravaService
@@ -54,22 +54,30 @@ def grab_auth_code_and_exchange_for_token(request: Request):
         token_service.store_token_details(access_token, expires_at, refresh_token)
 
         strava_service = StravaService(access_token)
-        user_activities = list(strava_service._retrieve_activities())
-
-        # fix path of json state file
-        cnt = len(user_activities)
-
-        # Get timestamp from embedding state for response
-        timestamp_str = strava_service.embedding_state.get("last_sync_timestamp")
-        total_embedded = strava_service.embedding_state.get("total_embedded")
+        strava_service.run()
 
         return {
-            "message": f"Token Response {token_response}",
-            "timestamp": timestamp_str,
-            "cnt" : cnt,
-            "total" : total_embedded,
-            "runs" : user_activities
+            "message": "strava service ran"
         }
+
+        
+        # parsed_activities = strava_service._retrieve_activities()
+        
+
+        # # fix path of json state file
+        # cnt = len(list(parsed_activities))
+
+        # # Get timestamp from embedding state for response
+        # timestamp_str = strava_service.embedding_state.get("last_sync_timestamp")
+        # total_embedded = strava_service.embedding_state.get("total_embedded")
+
+        # return {
+        #     "message": f"Token Response {token_response}",
+        #     "timestamp": timestamp_str,
+        #     "cnt" : cnt,
+        #     "total" : total_embedded,
+        #     "runs" : parsed_activities
+        # }
 
     return {"message" : "Authorization Failed"}
 
@@ -91,6 +99,8 @@ def run_listener():
 def run_mcp():
     mcp.add_tool(retrieve_strava_activities)
     mcp.add_tool(authenticate_with_strava)
+    mcp.add_tool(lookup_specific_run_by_date)
+    mcp.add_tool(lookup_by_retrieval_query)
     mcp.run(transport='stdio') 
 
 # I want to allow semantic search of a data base 
