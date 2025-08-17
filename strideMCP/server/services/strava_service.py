@@ -31,13 +31,11 @@ class StravaService:
         user_activites = self._retrieve_activities()
         if len(user_activites) < 1:
             return
-        print("we retrieved the activities")
         points = []
         for a in user_activites:
             meaningful_text = self._convert_activity_to_paragraph(a)
             points.append((a, meaningful_text))
 
-        print("moving onto qdrant insertion process")
         qdrant_service.insert_points(points)
 
 

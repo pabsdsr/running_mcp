@@ -6,17 +6,14 @@ from stravalib import Client
 import uvicorn
 import threading
 import os
-import json
-from datetime import datetime
 
-from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query
+from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query, look_up_last_N_runs
 from dotenv import load_dotenv
 from server.services.token_service import token_service
 from server.services.strava_service import StravaService
 
 load_dotenv()
 
-access_token= None
 
 mcp_listener = FastAPI(
     title="MCP Listener"
@@ -34,11 +31,8 @@ mcp_listener.add_middleware(
 
 @mcp_listener.get("/authorization")
 def grab_auth_code_and_exchange_for_token(request: Request):
-    # store this with the token service
-    global access_token
-    auth_code = request.query_params.get("code")
 
-    cnt = 1
+    auth_code = request.query_params.get("code")
 
     if auth_code:
         client = Client()
@@ -60,37 +54,12 @@ def grab_auth_code_and_exchange_for_token(request: Request):
             "message": "strava service ran"
         }
 
-        
-        # parsed_activities = strava_service._retrieve_activities()
-        
-
-        # # fix path of json state file
-        # cnt = len(list(parsed_activities))
-
-        # # Get timestamp from embedding state for response
-        # timestamp_str = strava_service.embedding_state.get("last_sync_timestamp")
-        # total_embedded = strava_service.embedding_state.get("total_embedded")
-
-        # return {
-        #     "message": f"Token Response {token_response}",
-        #     "timestamp": timestamp_str,
-        #     "cnt" : cnt,
-        #     "total" : total_embedded,
-        #     "runs" : parsed_activities
-        # }
 
     return {"message" : "Authorization Failed"}
 
 
 mcp = FastMCP("Stride")
 
-@mcp.tool()
-def get_token() -> str:
-    global access_token
-    print(f"access_token from tool {access_token}")
-    if access_token:
-        return access_token
-    return "No Access token found"
 
 def run_listener():
     uvicorn.run(mcp_listener, host="127.0.0.1", port=5000)
@@ -101,13 +70,9 @@ def run_mcp():
     mcp.add_tool(authenticate_with_strava)
     mcp.add_tool(lookup_specific_run_by_date)
     mcp.add_tool(lookup_by_retrieval_query)
+    mcp.add_tool(look_up_last_N_runs)
     mcp.run(transport='stdio') 
 
-# I want to allow semantic search of a data base 
-# for example: retrieve all of my long runs, tempo runs, farlek, etc
-# This will be dependent on the activities description that the user inputs
-# So i will either have to start adding descriptions to my runs or make some fake data
-# 
 
 def main():
     mcp_thread = threading.Thread(target=run_mcp)

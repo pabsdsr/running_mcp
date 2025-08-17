@@ -80,22 +80,30 @@ class QdrantService():
         )
 
         return search_result
+
+    def search_for_runs_by_n(self, n: int):
+        search_result = self.client.scroll(
+            collection_name=self.collection_name,
+            limit=n,
+            order_by=OrderBy(
+                key="time_stamp",
+                direction= "desc"
+            )
+        )
+
+        return search_result
     
     def insert_points(self, points):
         points_to_be_inserted = []
-        print(f"These are the points we need to insert {points}")
         for p in points:
             run_json = p[0]
             run_text = p[1]
 
             vector = self._embed_activity(run_text)
-            # todays_date_obj = datetime.fromisoformat(run_json["date"].replace('Z', '+00:00'))
             date_str = str(run_json["date"])
             todays_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
             todays_date = todays_date.strftime("%Y-%m-%d")
 
-            # todays_date = run_json["date"
-            # todays_date_obj = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ")
             todays_date_obj = datetime.fromisoformat(date_str)
             time_stamp = int(todays_date_obj.timestamp())
 
@@ -111,7 +119,6 @@ class QdrantService():
                 }
             )
             points_to_be_inserted.append(point)
-        print(f"Points to be inserted: {points_to_be_inserted}")
         self.client.upsert(
             collection_name=self.collection_name,
             points=points_to_be_inserted

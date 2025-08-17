@@ -146,8 +146,8 @@ def lookup_specific_run_by_date(
 # RETRIEVAL_QUERY
 
 def lookup_by_retrieval_query(
-    retrieval_query: str = Field(description= "A general user query that will allow you to create a vector embedding and search for answer")
-) -> dict:
+        retrieval_query: str = Field(description= "A general user query that will allow you to create a vector embedding and search for answer")
+    ) -> dict:
     
     vector = qdrant_service.embed_query(retrieval_query)
 
@@ -155,6 +155,14 @@ def lookup_by_retrieval_query(
 
     return {"runs" : results}
 
+
+def look_up_last_N_runs(
+        N: int = Field(description="An integer inferred from the user query")    
+    ) -> dict:
+
+    last_n_runs = qdrant_service.search_for_runs_by_n(N)
+
+    return {"last_n_runs" : last_n_runs}
 
 
 
