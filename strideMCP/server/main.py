@@ -1,13 +1,18 @@
 from mcp.server.fastmcp import FastMCP
 from fastapi import FastAPI
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from stravalib import Client
 import uvicorn
 import threading
+import httpx
+import json
 import os
+import matplotlib.pyplot as plt
+from io import BytesIO
 
-from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query, look_up_last_N_runs
+from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query, look_up_last_N_runs, find_best_time_to_run
 from dotenv import load_dotenv
 from server.services.token_service import token_service
 from server.services.strava_service import StravaService
@@ -29,8 +34,32 @@ mcp_listener.add_middleware(
 )
 
 
+@mcp_listener.get("/plotRunData")
+async def plot_run_data(request: Request):
+    body = request.query_params.get("payload")
+    data = json.loads(body)
+
+    raw_mile_splits = data["raw_mile_splits"]
+
+    x_labels = []
+    for i in range(1, len(raw_mile_splits) + 1):
+        x_labels.append(f"{i}")
+    
+    plt.bar(x_labels, raw_mile_splits)
+    plt.xlabel("Miles")
+    plt.ylabel("Mins Per Mile")
+    plt.title("Mile Splits")
+
+    buf = BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close()
+
+    return StreamingResponse(buf, media_type="image/png")
+
 @mcp_listener.get("/authorization")
 def grab_auth_code_and_exchange_for_token(request: Request):
+
 
     auth_code = request.query_params.get("code")
 
@@ -50,12 +79,31 @@ def grab_auth_code_and_exchange_for_token(request: Request):
         strava_service = StravaService(access_token)
         strava_service.run()
 
+        test_forward_geocoding()
+
         return {
             "message": "strava service ran"
         }
 
 
     return {"message" : "Authorization Failed"}
+
+
+def test_forward_geocoding():
+    url = "https://api.mapbox.com/search/geocode/v6/forward"
+    
+    params = {
+        "q": "Dover, Nh",  # query string (httpx handles URL encoding)
+        "access_token": "pk.eyJ1IjoicGFic2RzciIsImEiOiJjbTVia3dscng0d21tMnJwdG1sNWh5dDcwIn0.tvH5Eo99g0JPQeKQMYMc4w",
+        "limit": "1"
+    }
+    mapbox_response = httpx.get(url, params=params)
+
+    if mapbox_response.status_code == 200:
+        data = mapbox_response.json()
+        print(data)
+    else:
+        print(f"Error: {mapbox_response.status_code}")
 
 
 mcp = FastMCP("Stride")

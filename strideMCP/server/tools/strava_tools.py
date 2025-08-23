@@ -2,7 +2,13 @@ import os
 from stravalib import Client
 from server.services.token_service import token_service
 from server.services.qdrant_tool import qdrant_service
+from server.utils.stravaUtility import *
 from pydantic import Field
+import httpx
+import json
+import urllib.parse
+
+
 
 def authenticate_with_strava() -> str:
     try:
@@ -136,13 +142,52 @@ def interpolate_time_at_distance(km_data, target_distance):
     
     return km_data[-1][1] if km_data else 0
 
+def find_best_time_to_run(location: str) -> dict:
+    url = "https://api.mapbox.com/search/geocode/v6/forward"
+    
+    params = {
+        "q": location,
+        "access_token": "pk.eyJ1IjoicGFic2RzciIsImEiOiJjbTVia3dscng0d21tMnJwdG1sNWh5dDcwIn0.tvH5Eo99g0JPQeKQMYMc4w",
+        "limit": "1"
+    }
+    mapbox_response = httpx.get(url, params=params)
+
+    if mapbox_response.status_code == 200:
+        data = mapbox_response.json()
+        data = data["features"][0]["geometry"]["coordinates"]
+    else:
+        data = "Error: {mapbox_response.status_code}"
+
+    
+    return {"coordinates" : mapbox_response}
+
+
 def lookup_specific_run_by_date(
         date: str = Field(description="Date in format YYYY-MM-DD inferred from query")
     ) -> dict:
 
     runs = qdrant_service.search_runs_by_date(date)
 
-    return {"runs" : runs}
+    run = runs[0]
+    run_info = run[0]
+    run_payload = getattr(run_info, "payload", False)
+
+    if run_payload:
+        url = encode_run_for_charts(run_payload)
+
+        return {
+            "run_payload" : run_payload,
+            "chart_url" : url
+        }
+
+
+
+    return {
+        "runs" : runs
+    }
+
+
+
 # RETRIEVAL_QUERY
 
 def lookup_by_retrieval_query(
@@ -151,9 +196,31 @@ def lookup_by_retrieval_query(
     
     vector = qdrant_service.embed_query(retrieval_query)
 
-    results = qdrant_service.search_for_runs_by_embedding(vector)
+    response = qdrant_service.search_for_runs_by_embedding(vector)
 
-    return {"runs" : results}
+
+
+    # runs = response["runs"]
+
+    # res_type = type(response)
+    # runs = getattr(response, "runs", False)
+
+    points = response.points
+    sorted_points = sorted(points, key=lambda point: point.score, reverse=True)
+    higest_score_point = sorted_points[0]
+    payload = getattr(higest_score_point, "payload", False)
+
+    if payload:
+        url = encode_run_for_charts(payload)
+
+        return {
+            "best_match": higest_score_point,
+            "matches" : points,
+            "best_match_chart_url" : url,
+            "chart_instructions": "IMPORTANT: Always mention that the user can view a visual chart of their mile splits by visiting the best_match_chart_url provided above."
+        }
+
+    return {"runs" : "Get attr failed"}
 
 
 def look_up_last_N_runs(
@@ -163,6 +230,11 @@ def look_up_last_N_runs(
     last_n_runs = qdrant_service.search_for_runs_by_n(N)
 
     return {"last_n_runs" : last_n_runs}
+
+
+# build a weather API tool that tells users when a good time to run is 
+
+# a route maker tool, give it mileage you want to run and the starting location, out and back or doest matter
 
 
 
