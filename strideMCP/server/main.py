@@ -79,7 +79,7 @@ def grab_auth_code_and_exchange_for_token(request: Request):
         strava_service = StravaService(access_token)
         strava_service.run()
 
-        test_forward_geocoding()
+        # test_forward_geocoding()
 
         return {
             "message": "strava service ran"
@@ -94,7 +94,7 @@ def test_forward_geocoding():
     
     params = {
         "q": "Dover, Nh",  # query string (httpx handles URL encoding)
-        "access_token": "pk.eyJ1IjoicGFic2RzciIsImEiOiJjbTVia3dscng0d21tMnJwdG1sNWh5dDcwIn0.tvH5Eo99g0JPQeKQMYMc4w",
+        "access_token": "",
         "limit": "1"
     }
     mapbox_response = httpx.get(url, params=params)
