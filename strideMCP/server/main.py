@@ -4,6 +4,7 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from stravalib import Client
+from server.database.db import init_db
 import uvicorn
 import threading
 import httpx
@@ -11,8 +12,8 @@ import json
 import os
 import matplotlib.pyplot as plt
 from io import BytesIO
-
-from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query, look_up_last_N_runs, find_best_time_to_run
+# from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query, look_up_last_N_runs, find_best_time_to_run
+from server.tools.strava_tools import *
 from dotenv import load_dotenv
 from server.services.token_service import token_service
 from server.services.strava_service import StravaService
@@ -33,6 +34,12 @@ mcp_listener.add_middleware(
     allow_headers=["*"],
 )
 
+def format_pace(decimal_minutes):
+    """Convert 7.5 minutes to '7:30' format"""
+    minutes = int(decimal_minutes)
+    seconds = int((decimal_minutes - minutes) * 60)
+    return f"{minutes}:{seconds:02d}"
+
 
 @mcp_listener.get("/plotRunData")
 async def plot_run_data(request: Request):
@@ -40,14 +47,19 @@ async def plot_run_data(request: Request):
     data = json.loads(body)
 
     raw_mile_splits = data["raw_mile_splits"]
+    min_pace = min(raw_mile_splits)
 
     x_labels = []
     for i in range(1, len(raw_mile_splits) + 1):
         x_labels.append(f"{i}")
     
-    plt.bar(x_labels, raw_mile_splits)
+    bars = plt.bar(x_labels, raw_mile_splits)
+    for bar, value in zip(bars, raw_mile_splits):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height(), 
+            format_pace(value), ha='center', va='bottom', fontsize=9)
     plt.xlabel("Miles")
     plt.ylabel("Mins Per Mile")
+    plt.ylim(bottom=min_pace - 1.0) 
     plt.title("Mile Splits")
 
     buf = BytesIO()
@@ -79,7 +91,6 @@ def grab_auth_code_and_exchange_for_token(request: Request):
         strava_service = StravaService(access_token)
         strava_service.run()
 
-        # test_forward_geocoding()
 
         return {
             "message": "strava service ran"
@@ -89,27 +100,13 @@ def grab_auth_code_and_exchange_for_token(request: Request):
     return {"message" : "Authorization Failed"}
 
 
-def test_forward_geocoding():
-    url = "https://api.mapbox.com/search/geocode/v6/forward"
-    
-    params = {
-        "q": "Dover, Nh",  # query string (httpx handles URL encoding)
-        "access_token": "",
-        "limit": "1"
-    }
-    mapbox_response = httpx.get(url, params=params)
-
-    if mapbox_response.status_code == 200:
-        data = mapbox_response.json()
-        print(data)
-    else:
-        print(f"Error: {mapbox_response.status_code}")
 
 
 mcp = FastMCP("Stride")
 
 
 def run_listener():
+    init_db()
     uvicorn.run(mcp_listener, host="127.0.0.1", port=5000)
 
 
@@ -119,7 +116,9 @@ def run_mcp():
     mcp.add_tool(lookup_specific_run_by_date)
     mcp.add_tool(lookup_by_retrieval_query)
     mcp.add_tool(look_up_last_N_runs)
-    mcp.run(transport='stdio') 
+    mcp.add_tool(compute_metric_historic_avg)
+    mcp.add_tool(compute_metric_by_date_range)
+    mcp.run(transport='stdio')
 
 
 def main():

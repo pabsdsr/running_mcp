@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from google import genai
 import uuid
 from google.genai import types
+import asyncio
 from dotenv import load_dotenv
 import os
 
@@ -31,7 +32,39 @@ class QdrantService():
             field_schema= PayloadSchemaType.FLOAT
         )
     
-    def _embed_activity(self, activity_text: str):
+    # embed the activities in parallel
+    # def _embed_activity(self, activity_text: str):
+    #     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+    #     embedding = client.models.embed_content(
+    #         model="text-embedding-004",
+    #         contents= activity_text,
+    #         config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
+    #     )
+
+    #     return embedding.embeddings[0].values
+
+    async def _embed_all_activities(self, activities):
+        """Embed multiple activities in parallel"""
+        tasks = []
+        for activity in activities:
+            tasks.append(self._embed_activity(activity[1]))
+        return await asyncio.gather(*tasks)
+    
+    def batch_embed(self, activities):
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+        embedding = client.models.embed_content(
+            model="text-embedding-004",
+            contents= activities,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
+        )
+
+        # return embedding.embeddings[0].values
+        return [e.values for e in embedding.embeddings]
+
+    
+    async def _embed_activity(self, activity_text: str):
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
         embedding = client.models.embed_content(
@@ -41,6 +74,7 @@ class QdrantService():
         )
 
         return embedding.embeddings[0].values
+
     
     def embed_query(self, query: str):
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -95,34 +129,75 @@ class QdrantService():
     
     def insert_points(self, points):
         points_to_be_inserted = []
-        for p in points:
-            run_json = p[0]
-            run_text = p[1]
+        
+        # Get all embeddings in parallel
+        # vectors = asyncio.run(self._embed_all_activities(points))
 
-            vector = self._embed_activity(run_text)
+        activites =[]
+        for p in points:
+            activites.append(p[1])
+
+        vectors = self.batch_embed(activites)
+        
+        for point_data, vector in zip(points, vectors):
+            run_json = point_data[0]
+            
             date_str = str(run_json["date"])
-            todays_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            date_str = date_str.replace("Z", "+00:00")
+            todays_date = datetime.fromisoformat(date_str)
             todays_date = todays_date.strftime("%Y-%m-%d")
 
             todays_date_obj = datetime.fromisoformat(date_str)
             time_stamp = int(todays_date_obj.timestamp())
 
             point = PointStruct(
-                id = str(uuid.uuid4()),
+                id=str(uuid.uuid4()),
                 vector=vector,
                 payload={
                     "run": run_json,
                     "date": todays_date,
                     "time_stamp": time_stamp,
-                    # make the strava id the actual one soon
                     "strava_id": "1"
                 }
             )
             points_to_be_inserted.append(point)
+
         self.client.upsert(
             collection_name=self.collection_name,
             points=points_to_be_inserted
         )
+    
+    # def insert_points(self, points):
+    #     points_to_be_inserted = []
+    #     for p in points:
+    #         run_json = p[0]
+    #         run_text = p[1]
+
+    #         vector = self._embed_activity(run_text)
+    #         date_str = str(run_json["date"])
+    #         date_str = date_str.replace("Z", "+00:00")
+    #         todays_date = datetime.fromisoformat(date_str)
+    #         todays_date = todays_date.strftime("%Y-%m-%d")
+
+    #         todays_date_obj = datetime.fromisoformat(date_str)
+    #         time_stamp = int(todays_date_obj.timestamp())
+
+    #         point = PointStruct(
+    #             id = str(uuid.uuid4()),
+    #             vector=vector,
+    #             payload={
+    #                 "run": run_json,
+    #                 "date": todays_date,
+    #                 "time_stamp": time_stamp,
+    #                 # make the strava id the actual one soon
+    #                 "strava_id": "1"
+    #             }
+    #         )
+    #         points_to_be_inserted.append(point)
+    #     self.client.upsert(
+    #         collection_name=self.collection_name,
+    #         points=points_to_be_inserted
+    #     )
 
 qdrant_service = QdrantService()
 

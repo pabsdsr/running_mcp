@@ -7,6 +7,8 @@ from pydantic import Field
 import httpx
 import json
 import urllib.parse
+from datetime import datetime, time, timezone
+from server.database.queries import *
 
 
 
@@ -199,12 +201,6 @@ def lookup_by_retrieval_query(
     response = qdrant_service.search_for_runs_by_embedding(vector)
 
 
-
-    # runs = response["runs"]
-
-    # res_type = type(response)
-    # runs = getattr(response, "runs", False)
-
     points = response.points
     sorted_points = sorted(points, key=lambda point: point.score, reverse=True)
     higest_score_point = sorted_points[0]
@@ -232,12 +228,6 @@ def look_up_last_N_runs(
     return {"last_n_runs" : last_n_runs}
 
 
-# build a weather API tool that tells users when a good time to run is 
-
-# a route maker tool, give it mileage you want to run and the starting location, out and back or doest matter
-
-
-
 def retrieve_strava_activities() -> dict:
     access_token = token_service.get_token()
 
@@ -263,3 +253,50 @@ def retrieve_strava_activities() -> dict:
 
     except Exception as e:
         return f"Retrieving activities failed: {e}"
+    
+
+def compute_metric_historic_avg(
+        metric_name = Field(
+            description="""
+                The name of a running metric. Map the user input to one of the metrics.
+                1. distance_miles
+                2. moving_time_sec
+                3. average_speed
+                4. pace_min_per_mile
+                5. total_elevation_gain
+            """
+        )   
+    ) -> dict:
+
+    historic_avg = get_historic_average_by_metric(metric_name)
+
+    key = metric_name + " historic average"
+
+    return {
+        key : historic_avg
+    }
+
+def compute_metric_by_date_range(
+        metric_name: str = Field(description="""
+                The name of a running metric. Map the user input to one of the metrics.
+                1. distance_miles
+                2. moving_time_sec
+                3. average_speed
+                4. pace_min_per_mile
+                5. total_elevation_gain
+            """
+        ),
+        start_date: str = Field(description="From the user query infer the start date in YYYY-MM-DD format."),
+        end_date: str = Field(description="From the user query infer the end date in YYYY-MM-DD format."),
+        time_range: str = Field(description="The users time range for requesting computation on metrics.")
+    ) -> dict:
+
+    # I might have to convert these to UTC, verify accuracy of this approach
+    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+    avg_between_dates = get_average_by_metric_between_dates(metric_name, start_date_obj, end_date_obj)
+    key = metric_name + " average for " + time_range
+    return {
+        key : avg_between_dates
+    }
+    
