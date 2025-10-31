@@ -12,3 +12,5 @@ def encode_run_for_charts(payload):
     encoded = urllib.parse.quote(json_str)
 
     return f"http://localhost:5000/plotRunData?payload={encoded}"
+
+# def plot_metrics_from_db():

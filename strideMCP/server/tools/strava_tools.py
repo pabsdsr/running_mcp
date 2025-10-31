@@ -153,4 +153,57 @@ def compute_metric_by_date_range(
     return {
         key : avg_between_dates
     }
+
+def get_data_points_for_metric_between_dates(
+        metric_name: str = Field(description="""
+                The name of a running metric. Map the user input to one of the metrics.
+                1. distance_miles
+                2. moving_time_sec
+                3. average_speed
+                4. pace_min_per_mile
+                5. total_elevation_gain
+            """
+        ),
+        start_date: str = Field(description="From the user query infer the start date in YYYY-MM-DD format."),
+        end_date: str = Field(description="From the user query infer the end date in YYYY-MM-DD format."),
+        time_range: str = Field(description="The users time range for requesting computation on metrics.")
+    ) -> dict:
+
+    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+    data_points = query_get_data_points_for_metric_between_dates(metric_name, start_date_obj, end_date_obj)
+
+    formatted_points = [
+        {
+            "value": value,
+            "date": date.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        for value, date in data_points
+    ]
+
+    try:
+        response = httpx.post(
+            "http://localhost:5000/plotMetricsOverTime",
+            json={"data_points": formatted_points}
+        )
+    except Exception as e:
+        return {
+            "error" : e
+        }
+
+    if response.status_code == 200:
+        return {
+            "data points" : data_points,
+            "INSTRUCTIONS_IMPORTANT" : "RENDER THIS CHART HTML",
+            "chart_html" : response.text
+        }
+    # data = {
+    #     "data_points" : formatted_points
+    # }
+
+    # json_str = json.dumps(data)
+    # encoded = urllib.parse.quote(json_str)
+
+    # chart_url = f"http://localhost:5000/plotMetricsOverTime?payload={encoded}"
     
+

@@ -1,7 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from fastapi import FastAPI
 from fastapi import Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from stravalib import Client
 from server.database.db import init_db
@@ -9,8 +9,10 @@ import uvicorn
 import threading
 import httpx
 import json
+import base64
 import os
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from io import BytesIO
 from server.tools.strava_tools import *
 from dotenv import load_dotenv
@@ -68,6 +70,78 @@ async def plot_run_data(request: Request):
 
     return StreamingResponse(buf, media_type="image/png")
 
+@mcp_listener.post("/plotMetricsOverTime")
+async def plot_run_data(request: Request):
+    data = await request.json()
+    data_points = data["data_points"]
+    values = [point["value"] for point in data_points]
+    dates = [datetime.strptime(point["date"], "%Y-%m-%d %H:%M:%S") for point in data_points]
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(dates, values, 'o-', linewidth=2, markersize=8)
+    
+    # Format the date axis
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    
+    # Add labels and title
+    plt.xlabel("Date")
+    plt.ylabel("Value")
+    plt.title("Metric Progress Over Time")
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Create the plot buffer
+    buf = BytesIO()
+    plt.savefig(buf, format="png", dpi=100, bbox_inches='tight')
+    buf.seek(0)
+    plt.close()
+
+    img_str = base64.b64encode(buf.getvalue()).decode()
+    html_content = f"""
+    <html>
+        <body>
+            <img src="data:image/png;base64,{img_str}" />
+        </body>
+    </html>
+    """
+    return html_content
+    # return HTMLResponse(content=html_content)
+    
+
+    # return StreamingResponse(buf, media_type="image/png")
+    
+
+# @mcp_listener.get("/plotMetricsOverTime")
+# async def plot_run_data(request: Request):
+#     body = request.query_params.get("payload")
+#     data = json.loads(body)
+
+#     data_points = data["data_points"]
+#     values = [point["value"] for point in data_points]
+#     dates = [datetime.strptime(point["date"], "%Y-%m-%d %H:%M:%S") for point in data_points]
+    
+#     plt.figure(figsize=(10, 6))
+#     plt.plot(dates, values, 'o-', linewidth=2, markersize=8)
+    
+#     # Format the date axis
+#     plt.gcf().autofmt_xdate()
+#     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    
+#     # Add labels and title
+#     plt.xlabel("Date")
+#     plt.ylabel("Value")
+#     plt.title("Metric Progress Over Time")
+#     plt.grid(True, linestyle='--', alpha=0.7)
+    
+#     # Create the plot buffer
+#     buf = BytesIO()
+#     plt.savefig(buf, format="png", dpi=100, bbox_inches='tight')
+#     buf.seek(0)
+#     plt.close()
+    
+#     return StreamingResponse(buf, media_type="image/png")
+    
+
 @mcp_listener.get("/authorization")
 def grab_auth_code_and_exchange_for_token(request: Request):
 
@@ -101,6 +175,7 @@ def grab_auth_code_and_exchange_for_token(request: Request):
 
 
 
+
 mcp = FastMCP("Stride")
 
 
@@ -116,6 +191,7 @@ def run_mcp():
     mcp.add_tool(look_up_last_N_runs)
     mcp.add_tool(compute_metric_historic_avg)
     mcp.add_tool(compute_metric_by_date_range)
+    mcp.add_tool(get_data_points_for_metric_between_dates)
     mcp.run(transport='stdio')
 
 

@@ -34,3 +34,21 @@ def get_average_by_metric_between_dates(metric_name: str, start_date, end_date):
     return {
         'average': result.average
     }
+
+def query_get_data_points_for_metric_between_dates(metric_name: str, start_date, end_date):
+    db = get_db()
+
+    results = db.query(
+        SnapshotMetrics.metric_value,
+        RollingAverageSnapshots.date_of_run
+    ).join(
+        RollingAverageSnapshots, SnapshotMetrics.snapshot_id == RollingAverageSnapshots.id
+    ).filter(
+        SnapshotMetrics.metric_name == metric_name,
+        RollingAverageSnapshots.date_of_run >= start_date,
+        RollingAverageSnapshots.date_of_run <= end_date
+    ).all()
+
+    
+
+    return results
