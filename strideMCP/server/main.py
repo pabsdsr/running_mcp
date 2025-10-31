@@ -12,7 +12,6 @@ import json
 import os
 import matplotlib.pyplot as plt
 from io import BytesIO
-# from server.tools.strava_tools import authenticate_with_strava, retrieve_strava_activities, lookup_specific_run_by_date, lookup_by_retrieval_query, look_up_last_N_runs, find_best_time_to_run
 from server.tools.strava_tools import *
 from dotenv import load_dotenv
 from server.services.token_service import token_service
@@ -111,7 +110,6 @@ def run_listener():
 
 
 def run_mcp():
-    mcp.add_tool(retrieve_strava_activities)
     mcp.add_tool(authenticate_with_strava)
     mcp.add_tool(lookup_specific_run_by_date)
     mcp.add_tool(lookup_by_retrieval_query)

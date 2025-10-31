@@ -32,18 +32,6 @@ class QdrantService():
             field_schema= PayloadSchemaType.FLOAT
         )
     
-    # embed the activities in parallel
-    # def _embed_activity(self, activity_text: str):
-    #     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-    #     embedding = client.models.embed_content(
-    #         model="text-embedding-004",
-    #         contents= activity_text,
-    #         config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
-    #     )
-
-    #     return embedding.embeddings[0].values
-
     async def _embed_all_activities(self, activities):
         """Embed multiple activities in parallel"""
         tasks = []
@@ -60,7 +48,6 @@ class QdrantService():
             config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
         )
 
-        # return embedding.embeddings[0].values
         return [e.values for e in embedding.embeddings]
 
     
@@ -91,9 +78,8 @@ class QdrantService():
         search_results = self.client.query_points(
             collection_name=self.collection_name,
             query=vectorized_query,
-            # the search filter is like if we only want to retrieve the points based on some criteria in the payload and the query vector
+            # search filter allows us to filter by fields on the payload
             # query_filter=search_filter,
-            # so far providing it with more points doesnt seem to slow it down all that much
             limit=3,
             score_threshold=self.score_threshold,
         )
@@ -129,9 +115,6 @@ class QdrantService():
     
     def insert_points(self, points):
         points_to_be_inserted = []
-        
-        # Get all embeddings in parallel
-        # vectors = asyncio.run(self._embed_all_activities(points))
 
         activites =[]
         for p in points:
@@ -166,38 +149,6 @@ class QdrantService():
             collection_name=self.collection_name,
             points=points_to_be_inserted
         )
-    
-    # def insert_points(self, points):
-    #     points_to_be_inserted = []
-    #     for p in points:
-    #         run_json = p[0]
-    #         run_text = p[1]
-
-    #         vector = self._embed_activity(run_text)
-    #         date_str = str(run_json["date"])
-    #         date_str = date_str.replace("Z", "+00:00")
-    #         todays_date = datetime.fromisoformat(date_str)
-    #         todays_date = todays_date.strftime("%Y-%m-%d")
-
-    #         todays_date_obj = datetime.fromisoformat(date_str)
-    #         time_stamp = int(todays_date_obj.timestamp())
-
-    #         point = PointStruct(
-    #             id = str(uuid.uuid4()),
-    #             vector=vector,
-    #             payload={
-    #                 "run": run_json,
-    #                 "date": todays_date,
-    #                 "time_stamp": time_stamp,
-    #                 # make the strava id the actual one soon
-    #                 "strava_id": "1"
-    #             }
-    #         )
-    #         points_to_be_inserted.append(point)
-    #     self.client.upsert(
-    #         collection_name=self.collection_name,
-    #         points=points_to_be_inserted
-    #     )
 
 qdrant_service = QdrantService()
 
